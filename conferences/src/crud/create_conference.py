@@ -4,6 +4,8 @@ from fastapi import Depends, Request, Response
 from app import router
 import supabase
 
+from src.schema.users import User
+
 # Create Conference
 @router.post("/conference")
 async def create_conference(
