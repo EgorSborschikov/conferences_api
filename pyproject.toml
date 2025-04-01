@@ -13,6 +13,10 @@ uuid = "^1.30"
 asyncio = "^3.4.3"
 uvicorn = "^0.34.0"
 pydantic-settings = "^2.8.1"
+sqlacodegen = "^3.0.0"
+psycopg2-binary = "^2.9.10"
+pyrtmp = "^0.3.1"
+pydub = "^0.25.1"
 
 
 [build-system]
