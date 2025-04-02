@@ -8,7 +8,7 @@
     ```nginx -c /path/to/nginx.conf ```;
 
     - Запуск серверной части из корневого каталога:
-    ```uvicorn main:conferences.app --host 0.0.0.0 --port 8000`` 
+    ``` poetry run uvicorn conferences.app:app --host 0.0.0.0 --port 8000 --reload`` 
 
 # Рекомендации
 
