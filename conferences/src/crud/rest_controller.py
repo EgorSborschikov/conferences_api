@@ -1,69 +1,172 @@
-# ReST API for create, search and join conferences
-
-from fastapi import FastAPI, APIRouter, HTTPException, WebSocket
+import logging
+from fastapi import APIRouter, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
+from conferences.src.models.conference import Conference
 from conferences.src.streaming.conference_state_management import active_conferences, active_streams, generate_unique_room_id
 from conferences.src.streaming.signal_server import manager
 
 router = APIRouter()
 
-@router.post("/create_conference")
-async def create_conference(name: str):
-    if len(active_conferences) >= 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Limit of active conferences reached"
-        )
-    room_id = generate_unique_room_id()
-    link = f"http://localhost/join/{room_id}"
-    active_conferences[room_id] = {"name": name, "users": 0}
-    return {"room_id": room_id, "link": link}
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Создание новой конференции
+@router.post("/create_conference")
+async def create_conference(conference: Conference):
+    logger.info(f"Received data: {conference}")
+    # Проверка на превышение лимита активных конференций
+    try:
+        if len(active_conferences) >= 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Достигнут лимит активных конференций"
+            )
+        # Генерация уникального ID для комнаты
+        room_id = generate_unique_room_id()
+        # Формирование ссылки для присоединения к конференции
+        link = f"127.0.0.1/join/{room_id}"
+        #Создание объекта конференции
+        new_conference = {
+            "name" : conference.name,
+            "room_id" : room_id,
+            "link" : link,
+            "active" : True,
+            "users" : 0
+        }
+        # Добавление новой конференции в список активных
+        active_conferences[room_id] = new_conference
+        # Возврат ID комнаты и ссылки для присоединения
+        return new_conference
+    except Exception as e:
+        logger.error(f"Ошибка создания конференции: {str(e)}")
+        raise HTTPException(
+            status_code = 500,
+            detail = f"Ошибка при создании конференции: {str(e)}"
+        )
+
+# Присоединение к существующей конференции
 @router.get("/join_conference/{room_id}")
 async def join_conference(room_id: str):
-    if room_id not in active_conferences:
+    logger.info(f"attemping to join conference with room_id : {room_id}")
+    # Проверка существования конференции
+    try:
+        if room_id not in active_conferences:
+            logger.error(f"Conference not found for room_id: {room_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="Конференция не найдена"
+            )
+        # Проверка наличия ключа 'users'
+        if "users" not in active_conferences[room_id]:
+            logger.error(f"Key 'users' not found in conference data for room_id : {room_id}")
+            raise HTTPException(
+                status_code = 500,
+                detail = "Внутрянняя ошибка сервера: ключ 'users' отсутствует "
+            )
+        # Увеличение количества пользователей в конференции
+        active_conferences[room_id]["users"] += 1
+        logger.info(f"Successfully joined conference with room_id : {room_id}")
+        # Возврат статуса успешного присоединения
+        return {"status": "Присоединение успешно"}
+    except Exception as e:
+        logger.error(f"Error joining conference: {str(e)}")
         raise HTTPException(
-            status_code=404,
-            detail="Conference not found"
+            status_code=500, 
+            detail=f"Ошибка при присоединении к конференции: {str(e)}"
         )
-    active_conferences[room_id]["users"] += 1
-    return {"status": "Joined successfully"}
 
+# Покидание конференции
 @router.post("/leave_conference/{room_id}")
 async def leave_conference(room_id: str):
-    if room_id not in active_conferences:
+    # Проверка существования конференции
+    try:
+        if room_id not in active_conferences:
+            raise HTTPException(
+                status_code=404,
+                detail="Конференция не найдена"
+            )
+        # Уменьшение количества пользователей в конференции
+        active_conferences[room_id]["users"] -= 1
+        # Удаление конференции, если не осталось пользователей
+        if active_conferences[room_id]["users"] == 0:
+            del active_conferences[room_id]
+        # Возврат статуса успешного выхода
+        return {"status": "Выход успешен"}
+    except Exception as e:
         raise HTTPException(
-            status_code=404,
-            detail="Conference not found"
+            status_code=500, 
+            detail=f"Ошибка при выходе из конференции: {str(e)}"
         )
-    active_conferences[room_id]["users"] -= 1
-    if active_conferences[room_id]["users"] == 0:
-        del active_conferences[room_id]
-    return {"status": "Left successfully"}
 
+# Получение списка активных конференций
 @router.get("/list_conferences")
 async def list_conferences():
-    return list(active_conferences.values())
+    try:
+        # Возврат списка всех активных конференций
+        return list(active_conferences.values())
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ошибка при получении списка активных конференций: {str(e)}"
+        )
 
+# Публикация потока данных
 @router.post("/rtmp/publish")
 async def rtmp_publish(data: dict):
-    room_id = data.get("name")
-    active_streams[room_id] = data
-    return JSONResponse(content={"status": "Stream started"})
+    try:
+        # Получение ID комнаты из данных
+        room_id = data.get("name")
+        # Проверка наличия имени комнаты в данных
+        if not room_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Не указано имя комнаты"
+            )
+        # Добавление потока в список активных
+        active_streams[room_id] = data
+        # Возврат статуса начала трансляции
+        return JSONResponse(content={"status": "Трансляция начата"})
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ошибка при публикации потока: {str(e)}"
+        )
 
+# Воспроизведение потока данных
 @router.post("/rtmp/play")
 async def rtmp_play(data: dict):
-    room_id = data.get("name")
-    if room_id in active_streams:
-        return JSONResponse(content={"status": "Stream playing"})
-    return JSONResponse(content={"status": "Stream not found"}, status_code=404)
+    try:
+        # Получение ID комнаты из данных
+        room_id = data.get("name")
+        # Проверка наличия имени комнаты в данных
+        if not room_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Не указано имя комнаты"
+            )
+        # Проверка существования потока
+        if room_id in active_streams:
+            return JSONResponse(content={"status": "Трансляция воспроизводится"})
+        # Возврат статуса, если поток не найден
+        return JSONResponse(content={"status": "Трансляция не найдена"}, status_code=404)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ошибка при воспроизведении потока: {str(e)}"
+        )
 
+# WebSocket конечная точка для обмена сообщениями в реальном времени
 @router.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
+    # Подключение WebSocket клиента
     await manager.connect(websocket)
     try:
+        # Цикл для получения сообщений от клиента
         while True:
             data = await websocket.receive_text()
-            await manager.broadcast(f"Room {room_id}: {data}")
-    except:
+            # Трансляция сообщения всем участникам комнаты
+            await manager.broadcast(f"Комната {room_id}: {data}")
+    except Exception as e:
+        # Логирование ошибки и отключение WebSocket клиента
+        print(f"Ошибка WebSocket: {e}")
         manager.disconnect(websocket)
