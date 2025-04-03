@@ -1,22 +1,33 @@
 import logging
-from fastapi import APIRouter, HTTPException, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
-from conferences.src.models.conference import Conference
+from conferences.src.models.conference import ConferenceRequest, ConferenceResponse
 from conferences.src.streaming.conference_state_management import active_conferences, active_streams, generate_unique_room_id
 from conferences.src.streaming.signal_server import manager
+from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def get_supabase() -> Client:
+    return create_client(os.getenv("supabase_url"), os.getenv("supabase_key"))
+
 # Создание новой конференции
-@router.post("/create_conference")
-async def create_conference(conference: Conference):
+@router.post("/create_conference", response_model = ConferenceResponse)
+async def create_conference(
+    conference: ConferenceRequest,
+    #supabase: Client = Depends(get_supabase)
+    ):
     logger.info(f"Received data: {conference}")
     # Проверка на превышение лимита активных конференций
     try:
-        if len(active_conferences) >= 2:
+        if len(active_conferences) > 2:
             raise HTTPException(
                 status_code=400,
                 detail="Достигнут лимит активных конференций"
@@ -26,15 +37,15 @@ async def create_conference(conference: Conference):
         # Формирование ссылки для присоединения к конференции
         link = f"127.0.0.1/join/{room_id}"
         #Создание объекта конференции
-        new_conference = {
-            "name" : conference.name,
-            "room_id" : room_id,
-            "link" : link,
-            "active" : True,
-            "users" : 0
-        }
+        new_conference = ConferenceResponse(
+            name=conference.name,
+            room_id=room_id,
+            link=link,
+            active=True,
+            users=1  # Создающий пользователь сразу учитывается
+        )
         # Добавление новой конференции в список активных
-        active_conferences[room_id] = new_conference
+        active_conferences[room_id] = new_conference.dict()
         # Возврат ID комнаты и ссылки для присоединения
         return new_conference
     except Exception as e:
