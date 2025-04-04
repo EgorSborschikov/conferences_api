@@ -1,14 +1,18 @@
 import hashlib
 import logging
+from typing import Dict
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
 from conferences.src.models.conference import ConferenceRequest, ConferenceResponse
-from conferences.src.streaming.conference_state_management import active_conferences, active_streams, generate_unique_room_id
 from conferences.src.streaming.signal_server import manager
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+
+# Временные словари (загрушки)
+active_conferences: Dict[str, Dict] = {}
+active_streams: Dict[str, Dict] = {}
 
 load_dotenv()
 
@@ -66,10 +70,12 @@ async def create_conference(
             "users": 1,
             "created_by": str(conference.created_by)  # Сохранение created_by
         }).execute()
-        logger.info(f"Конференция {room_id} записана как созданная пользователем")
-    
-        # Добавление новой конференции в список активных
-        active_conferences[hashed_room_id] = new_conference.dict()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при создании конференции в Supabase"
+            )
 
         # Возврат данных конференции
         return new_conference
@@ -82,22 +88,33 @@ async def create_conference(
 
 # Присоединение пользователя к существующей конференции
 @router.get("/join_conference/{room_id}")
-async def join_conference(room_id: str):
+async def join_conference(
+    room_id: str,
+    supabase: Client = Depends(get_supabase)
+    ):
     logger.info(f"attemping to join conference with room_id : {room_id}")
 
-    # Проверка существования конференции
     try:
-        if room_id not in active_conferences:
-            logger.error(f"Conference not found for room_id: {room_id}")
+        # Проверка существования конференции
+        conference = supabase.table('conferences').select("*").eq("room_id", room_id).single().execute()
+
+        if not conference.data or not conference.data['active']:
             raise HTTPException(
-                status_code=404,
-                detail="Конференция не найдена"
+                status_code = 404,
+                detail = "Конференция не найдена или не активна"
             )
 
-        # Увеличение количества пользователей в конференции
-        active_conferences[room_id]["users"] += 1
-        logger.info(f"Successfully joined conference with room_id : {room_id}")
-        # Возврат статуса успешного присоединения
+        response = supabase.table('conferences').update({
+            "users": conference.data['users'] + 1
+        }).eq("room_id", room_id).execute()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при обновлении данных в Supabase"
+            )
+
+        logger.info(f"User  successfully joined conference with room_id: {room_id}")
         return {"status": "Присоединение успешно"}
     
     except Exception as e:
@@ -110,53 +127,61 @@ async def join_conference(room_id: str):
 # Покидание пользователем конференции
 @router.post("/leave_conference/{room_id}")
 async def leave_conference(
-    room_id: str,
+    room_id: str, 
     supabase: Client = Depends(get_supabase)
     ):
-    # Проверка существования конференции
+
     try:
-        if room_id not in active_conferences:
+        # Проверка существования конференции
+        conference = supabase.table('conferences').select("*").eq("room_id", room_id).single().execute()
+
+        if not conference.data or not conference.data['active']:
             raise HTTPException(
                 status_code=404,
-                detail="Конференция не найдена"
+                detail="Конференция не найдена или не активна"
             )
         
         # Уменьшение количества пользователей в конференции
-        active_conferences[room_id]["users"] -= 1
+        response = supabase.table('conferences').update({
+            "users": conference.data['users'] - 1
+        }).eq("room_id", room_id).execute()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при обновлении данных в Supabase"
+            )
 
         # Удаление конференции, если не осталось пользователей
-        if active_conferences[room_id]["users"] == 0:
-            del active_conferences[room_id]
-            # Обновление статуса конференции в Supabase
-            response = supabase.table('conferences').update({
-                "active" : False
+        if conference.data['users'] - 1 == 0:
+            supabase.table('conferences').update({
+                "active": False
             }).eq("room_id", room_id).execute()
-            if response.error:
-                raise HTTPException(
-                    status_code=500, 
-                    detail="Ошибка при обновлении данных в Supabase"
-                )
 
-        # Возврат статуса успешного выхода
+        logger.info(f"User  successfully left conference with room_id: {room_id}")
         return {"status": "Выход успешен"}
+
     except Exception as e:
+        logger.error(f"Error leaving conference: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Ошибка при выходе из конференции: {str(e)}"
         )
 
 # Получение списка активных конференций
 @router.get("/list_conferences")
-async def list_conferences(
-    supabase: Client = Depends(get_supabase)
-    ):
+async def list_conferences(supabase: Client = Depends(get_supabase)):
     try:
-        # Возврат списка всех активных конференций
+        # Получение списка всех активных конференций
         response = supabase.table('conferences').select("*").eq("active", True).execute()
-        if response.error:
-            raise HTTPException(status_code=500, detail="Ошибка при получении данных из Supabase")
+
+        # Проверка наличия ошибок в ответе
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(status_code=500, detail=f"Ошибка при получении данных из Supabase: {response.error.message}")
+
+        # Возврат данных конференций
         return response.data
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
