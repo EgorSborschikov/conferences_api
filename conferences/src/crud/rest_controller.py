@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 # Временные словари (загрушки)
 active_conferences: Dict[str, Dict] = {}
-active_streams: Dict[str, Dict] = {}
+active_streams: Dict[str, WebSocket] = {}
 
 load_dotenv()
 
@@ -188,63 +188,44 @@ async def list_conferences(supabase: Client = Depends(get_supabase)):
             detail=f"Ошибка при получении списка активных конференций: {str(e)}"
         )
 
-# Публикация потока данных
-@router.post("/rtmp/publish")
-async def rtmp_publish(data: dict):
+# Прием бинарных данных (аудио и видео) от участника и передача их остальным участникам комнаты
+@router.websocket("/ws/publish/{room_id}")
+async def websocket_publish(websocket: WebSocket, room_id: str):
+    await manager.connect(websocket, room_id)
+    active_streams[room_id] = websocket
+
     try:
-        # Получение ID комнаты из данных
-        room_id = data.get("name")
-
-        # Проверка наличия имени комнаты в данных
-        if not room_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Не указано имя комнаты"
-            )
-        
-        # Добавление потока в список активных
-        active_streams[room_id] = data
-
-        # Возврат статуса начала трансляции
-        return JSONResponse(content={"status": "Трансляция начата"})
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Ошибка при публикации потока: {str(e)}"
-        )
-
-# Воспроизведение потока данных
-@router.post("/rtmp/play")
-async def rtmp_play(data: dict):
-    try:
-        # Получение ID комнаты из данных
-        room_id = data.get("name")
-
-        # Проверка наличия имени комнаты в данных
-        if not room_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Не указано имя комнаты"
-            )
-        
-        # Проверка существования потока
-        if room_id in active_streams:
-            return JSONResponse(content={"status": "Трансляция воспроизводится"})
-        
-        # Возврат статуса, если поток не найден
-        return JSONResponse(content={"status": "Трансляция не найдена"}, status_code=404)
+        while True:
+            data = await websocket.receive_bytes() # Получение бинарных данных
+            await manager.broadcast(room_id, data) # Передача данных всем участникам комнаты
     
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Ошибка при воспроизведении потока: {str(e)}"
-        )
+        logger.info(f"Ошибка Websocket: {e}")
+
+    finally:
+        del active_conferences[room_id]
+        manager.disconnect(websocket, room_id)
+
+# Поддержка соединения и получение данных от сервера
+@router.websocket("/ws/play/{room_id}")
+async def websocket_play(websocket: WebSocket, room_id: str):
+    await manager.connect(websocket, room_id)
+
+    try:
+        while True:
+            await websocket.receive_text() # Ожидаем сообщения, чтобы поддерживать соединение
+
+    except Exception as e:
+        logger.info(f"Ошибка Websocket: {e}")
+    
+    finally:
+        manager.disconnect(websocket, room_id)
 
 # WebSocket конечная точка для обмена сообщениями в реальном времени
 @router.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     # Подключение WebSocket клиента
-    await manager.connect(websocket)
+    await manager.connect(websocket, room_id)
     
     try:
         # Цикл для получения сообщений от клиента
@@ -252,8 +233,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
             data = await websocket.receive_text()
 
             # Трансляция сообщения всем участникам комнаты
-            await manager.broadcast(f"Комната {room_id}: {data}")
+            await manager.broadcast(room_id, f"Комната {room_id}: {data}")
+
     except Exception as e:
         # Логирование ошибки и отключение WebSocket клиента
         print(f"Ошибка WebSocket: {e}")
-        manager.disconnect(websocket)
+
+    finally:
+        manager.disconnect(websocket, room_id)
