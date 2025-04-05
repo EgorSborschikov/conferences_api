@@ -25,7 +25,7 @@ class ConnectionManager:
             del self.tasks[room_id]
 
     # Асинхронный метод доставки сообщения в очередь, а не отправка их непосредственно
-    async def broadcast(self, room_id: str, message: str):
+    async def broadcast(self, room_id: str, message: bytes):
         await self.message_queues[room_id].put(message)
 
     # Асинхронный метод запускается как отдельная задача для каждой комнаты и обрабатывает отправку сообщений с задержкой
@@ -38,5 +38,3 @@ class ConnectionManager:
                 await asyncio.sleep(0.5) # Симуляция задержки
             except asyncio.CancelledError:
                 break
-
-manager = ConnectionManager()

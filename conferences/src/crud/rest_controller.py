@@ -5,7 +5,6 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
 from conferences.src.models.conference import ConferenceRequest, ConferenceResponse
-from conferences.src.streaming.signal_server import manager
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
