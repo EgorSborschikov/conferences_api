@@ -2,16 +2,12 @@ import hashlib
 import logging
 from typing import Dict
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
 from fastapi.responses import JSONResponse
 from conferences.src.models.conference import ConferenceRequest, ConferenceResponse
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
-
-# Временные словари (загрушки)
-active_conferences: Dict[str, Dict] = {}
-active_streams: Dict[str, WebSocket] = {}
 
 load_dotenv()
 
@@ -35,13 +31,6 @@ async def create_conference(
     logger.info(f"Received data: {conference}")
 
     try:
-        # Проверка на превышение лимита активных конференций
-        if len(active_conferences) > 2:
-            raise HTTPException(
-                status_code=400,
-                detail="Достигнут лимит активных конференций"
-            )
-
         # Генерация уникального ID для комнаты
         room_id = str(uuid.uuid4())
         hashed_room_id = hash_room_id(room_id)
@@ -167,16 +156,34 @@ async def leave_conference(
             detail=f"Ошибка при выходе из конференции: {str(e)}"
         )
 
-# Получение списка активных конференций
+# Получение списка активных конференций с фильтрацией по пользователю
 @router.get("/list_conferences")
-async def list_conferences(supabase: Client = Depends(get_supabase)):
+async def list_conferences(
+    created_by: str = Query(None, description="Filter by created_by"),
+    supabase: Client = Depends(get_supabase)
+):
     try:
-        # Получение списка всех активных конференций
-        response = supabase.table('conferences').select("*").eq("active", True).execute()
+        # Логирование значения created_by
+        print(f"Filtering by created_by: {created_by}")
+
+        # Построение запроса с учетом фильтрации по created_by
+        query = supabase.table('conferences').select("*").eq("active", True)
+
+        if created_by:
+            query = query.eq("created_by", created_by)
+
+        # Логирование запроса
+        print(f"Executing query: {query}")
+
+        # Выполнение запроса
+        response = query.execute()
 
         # Проверка наличия ошибок в ответе
         if hasattr(response, 'error') and response.error:
-            raise HTTPException(status_code=500, detail=f"Ошибка при получении данных из Supabase: {response.error.message}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка при получении данных из Supabase: {response.error.message}"
+            )
 
         # Возврат данных конференций
         return response.data
