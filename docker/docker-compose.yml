@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-supabase-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/server/  
+      - /server/.venv 
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUPABASE_URL=${supabaseUrl}  # Из .env файла
+      - SUPABASE_KEY=${supabaseKey}  # Из .env файла
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: poetry run uvicorn conferences.app:app --host 0.0.0.0 --port 8000

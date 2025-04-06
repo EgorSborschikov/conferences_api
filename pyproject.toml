@@ -13,11 +13,7 @@ uuid = "^1.30"
 asyncio = "^3.4.3"
 uvicorn = "^0.34.0"
 pydantic-settings = "^2.8.1"
-sqlacodegen = "^3.0.0"
-pydub = "^0.25.1"
 python-dotenv = "^1.1.0"
-opencv-python = "^4.11.0.86"
-pyaudio = "^0.2.14"
 
 
 [build-system]
