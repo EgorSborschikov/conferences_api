@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_supabase() -> Client:
-    return create_client(os.getenv("supabase_url"), os.getenv("supabase_key"))
+    return create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def hash_room_id(room_id: str) -> str:
     return hashlib.sha256(room_id.encode()).hexdigest()
