@@ -1,4 +1,4 @@
-FROM python:3.10.12 AS prod
+FROM python:3.12.12 AS prod
 
 RUN apt-get update && apt-get install -y \
     gcc \
