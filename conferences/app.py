@@ -1,6 +1,6 @@
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from conferences.src.crud.rest_controller import router
+from conferences.src.repository.rest_controller import router
 from conferences.src.streaming.signal_server import ConnectionManager
 import uvicorn
 

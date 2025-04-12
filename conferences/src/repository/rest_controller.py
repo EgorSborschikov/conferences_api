@@ -3,11 +3,13 @@ import logging
 from typing import Dict
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
-from fastapi.responses import JSONResponse
-from conferences.src.models.conference import ConferenceRequest, ConferenceResponse
+from conferences.src.schema.create_conference import ConferenceRequest, ConferenceResponse
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+
+from conferences.src.schema.delete_conference import DeleteConferenceRequest, DeleteConferenceResponse
+from conferences.src.schema.update_conference_name import UpdateConferenceNameRequest, UpdateConferenceNameResponse
 
 load_dotenv()
 
@@ -74,6 +76,39 @@ async def create_conference(
             detail=f"Ошибка при создании конференции: {str(e)}"
         )
 
+# Изменение названия конференции
+@router.put("/update_conference_name", response_model=UpdateConferenceNameResponse)
+async def update_conference_name(
+    update_request: UpdateConferenceNameRequest,
+    supabase: Client = Depends(get_supabase)
+):
+    logger.info(f"Received update request: {update_request}")
+
+    try:
+        # Обновление названия конференции в Supabase
+        response = supabase.table('conferences').update({
+            "name": update_request.new_name
+        }).eq('room_id', update_request.room_id).execute()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при обновлении названия конференции в Supabase"
+            )
+
+        # Возврат обновленных данных конференции
+        return UpdateConferenceNameResponse(
+            room_id=update_request.room_id,
+            name=update_request.new_name,
+            message="Название конференции успешно обновлено"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка обновления названия конференции: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при обновлении названия конференции: {str(e)}"
+        )
+
 # Присоединение пользователя к существующей конференции
 @router.get("/join_conference/{room_id}")
 async def join_conference(
@@ -110,6 +145,36 @@ async def join_conference(
         raise HTTPException(
             status_code=500, 
             detail=f"Ошибка при присоединении к конференции: {str(e)}"
+        )
+    
+# Удаление конференции
+@router.delete("/delete_conference", response_model=DeleteConferenceResponse)
+async def delete_conference(
+    delete_request: DeleteConferenceRequest,
+    supabase: Client = Depends(get_supabase)
+):
+    logger.info(f"Received delete request: {delete_request}")
+
+    try:
+        # Удаление конференции из Supabase
+        response = supabase.table('conferences').delete().eq('room_id', delete_request.room_id).execute()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при удалении конференции из Supabase"
+            )
+
+        # Возврат подтверждения удаления
+        return DeleteConferenceResponse(
+            room_id=delete_request.room_id,
+            message="Конференция успешно удалена"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка удаления конференции: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при удалении конференции: {str(e)}"
         )
 
 # Покидание пользователем конференции
