@@ -108,6 +108,36 @@ async def update_conference_name(
             status_code=500,
             detail=f"Ошибка при обновлении названия конференции: {str(e)}"
         )
+    
+# Удаление конференции
+@router.delete("/delete_conference", response_model=DeleteConferenceResponse)
+async def delete_conference(
+    delete_request: DeleteConferenceRequest,
+    supabase: Client = Depends(get_supabase)
+):
+    logger.info(f"Received delete request: {delete_request}")
+
+    try:
+        # Удаление конференции из Supabase
+        response = supabase.table('conferences').delete().eq('room_id', delete_request.room_id).execute()
+
+        if hasattr(response, 'error') and response.error:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при удалении конференции из Supabase"
+            )
+
+        # Возврат подтверждения удаления
+        return DeleteConferenceResponse(
+            room_id=delete_request.room_id,
+            message="Конференция успешно удалена"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка удаления конференции: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при удалении конференции: {str(e)}"
+        )
 
 # Присоединение пользователя к существующей конференции
 @router.get("/join_conference/{room_id}")
@@ -145,36 +175,6 @@ async def join_conference(
         raise HTTPException(
             status_code=500, 
             detail=f"Ошибка при присоединении к конференции: {str(e)}"
-        )
-    
-# Удаление конференции
-@router.delete("/delete_conference", response_model=DeleteConferenceResponse)
-async def delete_conference(
-    delete_request: DeleteConferenceRequest,
-    supabase: Client = Depends(get_supabase)
-):
-    logger.info(f"Received delete request: {delete_request}")
-
-    try:
-        # Удаление конференции из Supabase
-        response = supabase.table('conferences').delete().eq('room_id', delete_request.room_id).execute()
-
-        if hasattr(response, 'error') and response.error:
-            raise HTTPException(
-                status_code=500,
-                detail="Ошибка при удалении конференции из Supabase"
-            )
-
-        # Возврат подтверждения удаления
-        return DeleteConferenceResponse(
-            room_id=delete_request.room_id,
-            message="Конференция успешно удалена"
-        )
-    except Exception as e:
-        logger.error(f"Ошибка удаления конференции: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Ошибка при удалении конференции: {str(e)}"
         )
 
 # Покидание пользователем конференции
