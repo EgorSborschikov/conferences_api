@@ -36,15 +36,21 @@ class ConnectionManager:
 
     # Асинхронный метод доставки сообщения в очередь, а не отправка их непосредственно
     async def broadcast(self, room_id: str, message: bytes):
-        await self.message_queues[room_id].put(message)
-        logger.debug(f"Сообщение добавлено в очередь комнаты {room_id}")
-
+        # Проверка на количество участников
+        if len(self.active_connections[room_id]) > 1:
+            await self.message_queues[room_id].put(message)
+            logger.debug(f"Сообщение добавлено в очередь комнаты {room_id}")
+        else:
+            logger.info(f"В комнате {room_id} только один участник. Сообщение не отправлено.")
+            
     # Асинхронный метод запускается как отдельная задача для каждой комнаты и обрабатывает отправку сообщений с задержкой
     async def send_messages(self, room_id: str):
         while True:
             try:
                 message = await self.message_queues[room_id].get()
                 connections = self.active_connections[room_id].copy()
+
+                logger.info(f"Началась трансляция сообщения в комнату {room_id}")
                 
                 # Вызов _safe_send
                 await asyncio.gather(

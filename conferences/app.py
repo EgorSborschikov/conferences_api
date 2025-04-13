@@ -10,7 +10,7 @@ app.include_router(router)
 
 manager = ConnectionManager()
 
-logging.basicConfig(
+logger = logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -23,17 +23,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 
     try:
         while True:
-            # Получение данных от клиента
-            data = await websocket.receive_bytes() # Используется метод для получения бинарных данных
-            logging.info(f"Получено {len(data)} байт из комнаты {room_id}")
-            await manager.broadcast(room_id, data) # Широковещательная передача данных в комнату
+            try:
+                # Получение данных от клиента
+                data = await websocket.receive_bytes() # Используется метод для получения бинарных данных
+                logging.info(f"Получено {len(data)} байт из комнаты {room_id}")
+                await manager.broadcast(room_id, data) # Широковещательная передача данных в комнату
+            except Exception as e:
+                logger.error(f"Ошибка при получении данных: {e}")
+                break
 
     except WebSocketDisconnect:
-        logging.info(f"Клиент отключился от комнаты {room_id}")
+        logger.info(f"Клиент отключился от комнаты {room_id}")
         manager.disconnect(websocket, room_id)
 
     except Exception as e:
-        logging.error(f"Ошибка WebSocket: {e}")
+        logger.error(f"Ошибка WebSocket: {e}")
         manager.disconnect(websocket, room_id)
 
 if __name__ == "__main__":
