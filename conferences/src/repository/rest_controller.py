@@ -1,28 +1,17 @@
-import hashlib
 import logging
-from typing import Dict
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
-from conferences.src.schema.create_conference import ConferenceRequest, ConferenceResponse
-from supabase import create_client, Client
-import os
-from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException, Query
+from supabase import Client
 
 from conferences.src.schema.delete_conference import DeleteConferenceRequest, DeleteConferenceResponse
 from conferences.src.schema.update_conference_name import UpdateConferenceNameRequest, UpdateConferenceNameResponse
-
-load_dotenv()
+from conferences.database.database_repository import get_supabase, hash_room_id
+from conferences.src.schema.create_conference import ConferenceRequest, ConferenceResponse
 
 router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-def get_supabase() -> Client:
-    return create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-def hash_room_id(room_id: str) -> str:
-    return hashlib.sha256(room_id.encode()).hexdigest()
 
 # Создание новой конференции
 @router.post("/create_conference", response_model=ConferenceResponse)
