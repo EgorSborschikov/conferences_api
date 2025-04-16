@@ -15,28 +15,34 @@ logger = logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# Подключение пользователей к комнате
+logger = logging.getLogger(__name__)
+
 # WebSocket конечная точка для обмена сообщениями в реальном времени
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
+    # Подключаем клиента к комнате
     await manager.connect(websocket, room_id)
 
     try:
         while True:
             try:
-                # Получение данных от клиента
-                data = await websocket.receive_bytes() # Используется метод для получения бинарных данных
-                logging.info(f"Получено {len(data)} байт из комнаты {room_id}")
-                await manager.broadcast(room_id, data) # Широковещательная передача данных в комнату
+                # Получаем данные от клиента
+                data = await websocket.receive_bytes()
+                logger.info(f"Получено {len(data)} байт из комнаты {room_id}")
+                # Широковещательная передача данных в комнату
+                await manager.broadcast(room_id, data)
             except Exception as e:
+                # Логируем ошибку при получении данных
                 logger.error(f"Ошибка при получении данных: {e}")
                 break
 
     except WebSocketDisconnect:
+        # Логируем отключение клиента
         logger.info(f"Клиент отключился от комнаты {room_id}")
         manager.disconnect(websocket, room_id)
 
     except Exception as e:
+        # Логируем ошибку WebSocket
         logger.error(f"Ошибка WebSocket: {e}")
         manager.disconnect(websocket, room_id)
 
