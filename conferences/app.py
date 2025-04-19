@@ -31,6 +31,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 logger.info(f"Получено {len(data)} байт из комнаты {room_id}")
                 # Широковещательная передача данных в комнату
                 await manager.broadcast(room_id, data)
+                logger.info(f"Передано {len(data)} байт в комнату {room_id}")
             except Exception as e:
                 # Логируем ошибку при получении данных
                 logger.error(f"Ошибка при получении данных: {e}")
