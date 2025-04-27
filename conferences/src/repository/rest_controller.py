@@ -2,7 +2,6 @@ import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from supabase import Client
-
 from conferences.src.schema.delete_conference import DeleteConferenceRequest, DeleteConferenceResponse
 from conferences.src.schema.update_conference_name import UpdateConferenceNameRequest, UpdateConferenceNameResponse
 from conferences.database.database_repository import get_supabase, hash_room_id

@@ -1,8 +1,10 @@
 import logging
+import threading
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from conferences.src.repository.rest_controller import router
 from conferences.src.streaming.signal_server import ConnectionManager
 import uvicorn
+from technical_support_bot.bot import run_telegram_bot
 
 app = FastAPI()
 
@@ -48,4 +50,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         manager.disconnect(websocket, room_id)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level = "info")
+    # Запуск FastAPI в основном потоке
+    fastapi_thread = threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "0.0.0.0", "port": 8000, "log_level": "info"})
+    fastapi_thread.start()
+
+    # Запуск Telegram-бота в отдельном потоке
+    telegram_bot_thread = threading.Thread(target=run_telegram_bot)
+    telegram_bot_thread.start()
