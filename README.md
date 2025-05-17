@@ -78,3 +78,8 @@
     ```shell
     docker-compose --env-file server/conferences/.env -f server/docker/docker-compose.yml --project-directory server/conferences/ up --build
     ```
+
+5. Когда контейнер запустился, можно отслеживать информацию в логах с помощью команды:
+    ```shell
+    docker logs <container PID> -f
+    ```
